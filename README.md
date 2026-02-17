@@ -29,40 +29,126 @@ pip install -e .[dev]
   - `get_agent_by_id`
 - Built-in wrappers for schedules, queue operations, MCP, workflows, and state.
 
-## Quick start: create and mutate an agent
+## Quick example (equivalent to Cloudflare's quick example, plus tool calling + Workers AI)
+
+This mirrors the Cloudflare quick example pattern (agent state + frontend sync), and adds:
+
+- a simple `@callable` tool-style method (`lookup_policy`), and
+- a Workers AI call (`env.AI.run(...)`) to generate a short response.
 
 ```python
-from python_agents import Agent
+# workers/index.py
+import json
 
-
-async def build_counter(env, ctx):
-    agent = Agent.create(state={"count": 0}, env=env, ctx=ctx)
-    await agent.set_state({"count": 1})
-    return agent
-```
-
-## Tool-calling example
-
-A practical pattern is to model tools as `@callable` methods and let your LLM choose one.
-
-```python
-from python_agents import call_callable, callable
+from workers import Response, WorkerEntrypoint
+from python_agents import Agent, call_callable, callable, route_agent_request
 
 
 class SupportTools:
     @callable
-    async def lookup_order(self, order_id: str) -> dict:
-        return {"order_id": order_id, "status": "shipped"}
+    def lookup_policy(self, topic: str) -> str:
+        policies = {
+            "refund": "Refunds are allowed within 30 days with a receipt.",
+            "shipping": "Standard shipping takes 3-5 business days.",
+        }
+        return policies.get(topic.lower(), "No policy found for that topic.")
 
-    @callable
-    def refund_policy(self) -> str:
-        return "Refunds are allowed within 30 days."
 
+class Default(WorkerEntrypoint):
+    async def fetch(self, request):
+        # App endpoint for tool call + Workers AI.
+        if request.method == "POST" and request.url.endswith("/api/chat"):
+            body = await request.json()
+            question = body.get("question", "")
+            topic = body.get("topic", "refund")
 
-async def run_tool_call(tool_name: str, arguments: dict):
-    tools = SupportTools()
-    # tool_name from model output; arguments parsed from JSON
-    return await call_callable(tools, tool_name, **arguments)
+            tool_result = await call_callable(SupportTools(), "lookup_policy", topic)
+
+            ai_result = await self.env.AI.run(
+                "@cf/meta/llama-3.1-8b-instruct",
+                {
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a concise support assistant.",
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Question: {question}\nPolicy: {tool_result}",
+                        },
+                    ]
+                },
+            )
+
+            return Response(
+                json.dumps(
+                    {
+                        "tool_result": tool_result,
+                        "answer": ai_result.get("response", "No response"),
+                    }
+                ),
+                headers={"content-type": "application/json"},
+            )
+
+        # Agent endpoint for realtime state sync with frontend.
+        routed = await route_agent_request(request, self.env)
+        if routed:
+            return routed
+
+        return Response("Not found", status=404)
+```
+
+```tsx
+// src/App.tsx
+import { useAgent } from "agents/react";
+import { useState } from "react";
+
+type CounterState = { count: number; lastAnswer?: string };
+
+export function App() {
+  const [question, setQuestion] = useState("Can I get a refund?");
+  const [topic, setTopic] = useState("refund");
+
+  const agent = useAgent<any, CounterState>({
+    agent: "support-agent",
+    name: "demo-user",
+  });
+
+  async function askSupport() {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question, topic }),
+    });
+    const data = await res.json();
+
+    await agent.setState({
+      ...agent.state,
+      lastAnswer: data.answer,
+    });
+  }
+
+  return (
+    <main>
+      <h1>Support Agent</h1>
+      <p>Count: {agent.state?.count ?? 0}</p>
+      <button onClick={() => agent.setState({ count: (agent.state?.count ?? 0) + 1 })}>
+        Increment
+      </button>
+
+      <hr />
+
+      <input value={question} onChange={(e) => setQuestion(e.target.value)} />
+      <select value={topic} onChange={(e) => setTopic(e.target.value)}>
+        <option value="refund">refund</option>
+        <option value="shipping">shipping</option>
+      </select>
+      <button onClick={askSupport}>Ask (tool + Workers AI)</button>
+
+      <p>{agent.state?.lastAnswer ?? "No AI answer yet."}</p>
+    </main>
+  );
+}
 ```
 
 ## MCP tool registration (parity with JS `server.tool(...)`)
@@ -257,29 +343,3 @@ Additional Pythonic wrappers are available for Cloudflare Agents APIs:
 - `create_mcp_handler(...)` (JS: `createMcpHandler`)
 - `route_agent_email(...)` (JS: `routeAgentEmail`)
 - `create_address_based_email_resolver(...)` (JS: `createAddressBasedEmailResolver`)
-
-For methods not listed above, use:
-
-```python
-await agent.call("camelCaseMethodName", arg1, arg2)
-# or
-await agent.call("snake_case_method_name", arg1, arg2)
-```
-
-## Testing
-
-```bash
-pytest
-```
-
-## Publishing notes (PyPI-ready project layout)
-
-This repository is prepared for packaging with `hatchling` via `pyproject.toml`.
-A standard release flow looks like:
-
-```bash
-python -m pip install --upgrade build twine
-python -m build
-python -m twine check dist/*
-python -m twine upload dist/*
-```
