@@ -1,6 +1,4 @@
-# Build and deploy a Python AI Agent on Cloudflare
-
-This repo shows how to build and run a Python AI agent on Cloudflare Workers, with the Cloudflare Agents runtime handling deployment, scaling, and infrastructure concerns.
+# Python AI Agents on Cloudflare
 
 This repo gives you a Python-first SDK for [Cloudflare Agents](https://developers.cloudflare.com/agents/?utm_content=agents.cloudflare.com) so you can stay in Python while deploying globally on Cloudflare Workers.
 
