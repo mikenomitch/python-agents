@@ -9,7 +9,7 @@ from ._ffi import get_agents_sdk, maybe_await, snake_to_camel, to_js
 
 
 class Agent:
-    """Pythonic wrapper around Cloudflare's JavaScript ``Agent`` instance.
+    """Wrapper around Cloudflare's JavaScript ``Agent`` instance.
 
     This class is intentionally thin: it keeps behavior in the JS SDK and only
     adds Python naming ergonomics (``snake_case`` methods).
@@ -67,7 +67,7 @@ class Agent:
         return self._js_agent.ctx
 
     async def call(self, method: str, *args: Any) -> Any:
-        """Call a JS agent method by Pythonic name (snake_case) or raw JS name."""
+        """Call a JS agent method by snake_case name or raw JS name."""
 
         js_method_name = snake_to_camel(method) if "_" in method else method
         target = getattr(self._js_agent, js_method_name)
