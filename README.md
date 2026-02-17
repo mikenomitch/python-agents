@@ -50,17 +50,9 @@ This SDK helps you express each part in Python.
 
 ## Quick start
 
-### 1) Install
+### 1) Dependency
 
-```bash
-pip install -e .
-```
-
-For contributors:
-
-```bash
-pip install -e .[dev]
-```
+Make sure `python-agents` is available in your project dependencies.
 
 ### 2) Create an agent and persist state
 
@@ -121,25 +113,7 @@ Keep memory or workflow status in agent state:
 await agent.set_state({"thread_id": "t_123", "step": "triage"})
 ```
 
-### 2) Scheduled jobs
-
-Run work later or repeatedly:
-
-```python
-await agent.schedule({"type": "email-digest"}, "2026-01-01T00:00:00Z")
-await agent.schedule_every({"type": "refresh-cache"}, "5 minutes")
-```
-
-### 3) Queue-based work
-
-Push long-running or async jobs into a queue:
-
-```python
-await agent.queue({"job": "index-document", "doc_id": "doc_42"})
-job = await agent.dequeue()
-```
-
-### 4) MCP tools
+### 2) MCP tools
 
 Expose structured tools for model/tool ecosystems:
 
@@ -155,6 +129,24 @@ class SupportTools:
 
 async def init_mcp(server):
     register_mcp_tools(server, SupportTools())
+```
+
+### 3) Scheduled jobs
+
+Run work later or repeatedly:
+
+```python
+await agent.schedule({"type": "email-digest"}, "2026-01-01T00:00:00Z")
+await agent.schedule_every({"type": "refresh-cache"}, "5 minutes")
+```
+
+### 4) Queue-based work
+
+Push long-running or async jobs into a queue:
+
+```python
+await agent.queue({"job": "index-document", "doc_id": "doc_42"})
+job = await agent.dequeue()
 ```
 
 
@@ -263,9 +255,9 @@ await agent.call("set_state", {"status": "ready"})
 await agent.call("schedule_every", {"type": "sync"}, "10 minutes")
 ```
 
-#### Dynamic Agent methods
+#### Direct Agent methods
 
-The wrapper also exposes common methods directly as `await agent.<method>(...)`:
+The wrapper exposes common methods directly as `await agent.<method>(...)`:
 
 - `set_state`
 - `schedule`
@@ -286,8 +278,21 @@ The wrapper also exposes common methods directly as `await agent.<method>(...)`:
 
 ```python
 await agent.set_state({"step": "triage"})
+await agent.schedule({"type": "email-digest"}, "2026-01-01T00:00:00Z")
+await agent.schedule_every({"type": "refresh-cache"}, "5 minutes")
+await agent.get_schedules()
+await agent.cancel_schedule("schedule-id-123")
 await agent.queue({"job": "index", "doc_id": "doc_42"})
-jobs = await agent.get_queue()
+await agent.dequeue()
+await agent.dequeue_all()
+await agent.get_queue()
+await agent.broadcast({"type": "notification", "payload": {"message": "build complete"}})
+await agent.run_workflow({"name": "onboarding", "input": {"user_id": "u_123"}})
+await agent.wait_for_approval({"request_id": "approval_1"})
+await agent.add_mcp_server({"name": "docs", "transport": "http", "url": "https://mcp.example.com"})
+await agent.remove_mcp_server("docs")
+await agent.get_mcp_servers()
+await agent.reply_to_email({"to": "user@example.com", "subject": "Update", "text": "Your request is complete."})
 ```
 
 ### Callable-method helpers
@@ -447,7 +452,7 @@ Wrapper around JS `McpAgent`.
 
 - `McpAgent.create(state=None, env=None, ctx=None) -> McpAgent`
 - `await mcp_agent.call(method, *args)`
-- Dynamic async method access via `await mcp_agent.some_method(...)`
+- Direct async method access via `await mcp_agent.some_method(...)`
 - Properties: `mcp_agent.state`, `mcp_agent.env`, `mcp_agent.ctx`
 
 ```python
@@ -463,7 +468,7 @@ Wrapper around JS `AgentWorkflow`.
 
 - `AgentWorkflow.create(init=None) -> AgentWorkflow`
 - `await workflow.call(method, *args)`
-- Dynamic async method access via `await workflow.some_method(...)`
+- Direct async method access via `await workflow.some_method(...)`
 
 ```python
 from python_agents import AgentWorkflow
