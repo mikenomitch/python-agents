@@ -1,18 +1,16 @@
-# Build and deploy a Python AI Agent on Cloudflare (fast)
+# Build and deploy a Python AI Agent on Cloudflare
 
-If you're a Python developer and you want to ship an AI agent **without** managing servers, containers, autoscaling, or ops plumbing, Cloudflare is one of the easiest places to do it.
+This repo shows how to build and run a Python AI agent on Cloudflare Workers, with the Cloudflare Agents runtime handling deployment, scaling, and infrastructure concerns.
 
 This repo gives you a Python-first SDK for [Cloudflare Agents](https://developers.cloudflare.com/agents/?utm_content=agents.cloudflare.com) so you can stay in Python while deploying globally on Cloudflare Workers.
 
 ## Why Cloudflare for Python Agents?
 
-- **Deploy globally by default**: your agent runs close to users on Cloudflare's network.
-- **No server management**: no VM setup, no Kubernetes, no autoscaling configuration.
-- **Built-in agent primitives**: state, scheduling, queues, routing, and MCP support.
-- **Python-first developer experience**: clean Python APIs, decorators, and familiar patterns.
-- **Production path from day one**: great for prototypes that need to become real products.
-
-In short: you write Python agent logic; Cloudflare handles the hard infrastructure parts.
+- **Runs globally** by default, so latency is usually good without extra setup.
+- **No server babysitting**: no VMs, no Kubernetes setup, no custom autoscaling logic.
+- **Useful agent features included**: state, scheduling, queues, routing, and MCP support.
+- **Feels like Python**: decorators and APIs that follow normal Python conventions.
+- **Can grow with you**: starts simple, but works for production workloads too.
 
 ---
 
@@ -227,18 +225,285 @@ servers = await agent.get_mcp_servers()
 
 ---
 
-## Why this is a strong default for Python agent builders
+## Full API reference (with examples)
 
-If your goal is to get a Python agent deployed quickly and reliably, Cloudflare gives you:
+This section covers everything exported by `python_agents`.
 
-- **Simple developer workflow** with a low ops burden
-- **Global performance** without extra infra work
-- **Agent-specific primitives** instead of stitching together many services
-- **A practical path from prototype to production**
+### `Agent`
 
-That combination is rare, and it makes Cloudflare Agents an excellent default platform for Python AI agents.
+Python wrapper around a JavaScript Cloudflare Agent instance.
 
----
+#### `Agent.create(state=None, env=None, ctx=None) -> Agent`
+
+Create a new `Agent` wrapper.
+
+```python
+from python_agents import Agent
+
+
+agent = Agent.create(state={"count": 0}, env=env, ctx=ctx)
+```
+
+#### Properties: `agent.state`, `agent.env`, `agent.ctx`
+
+Read the underlying runtime state, environment bindings, and execution context.
+
+```python
+current_state = agent.state
+bindings = agent.env
+execution_context = agent.ctx
+```
+
+#### `await agent.call(method, *args)`
+
+Call a method by name (snake_case names are mapped to JS camelCase for you).
+
+```python
+await agent.call("set_state", {"status": "ready"})
+await agent.call("schedule_every", {"type": "sync"}, "10 minutes")
+```
+
+#### Dynamic Agent methods
+
+The wrapper also exposes common methods directly as `await agent.<method>(...)`:
+
+- `set_state`
+- `schedule`
+- `schedule_every`
+- `get_schedules`
+- `cancel_schedule`
+- `queue`
+- `dequeue`
+- `dequeue_all`
+- `get_queue`
+- `broadcast`
+- `run_workflow`
+- `wait_for_approval`
+- `add_mcp_server`
+- `remove_mcp_server`
+- `get_mcp_servers`
+- `reply_to_email`
+
+```python
+await agent.set_state({"step": "triage"})
+await agent.queue({"job": "index", "doc_id": "doc_42"})
+jobs = await agent.get_queue()
+```
+
+### Callable-method helpers
+
+Use these when you want discoverable methods that can be called by name.
+
+#### `@callable(name=None)`
+
+Mark an instance method as callable.
+
+```python
+from python_agents import callable
+
+
+class Actions:
+    @callable
+    async def ping(self) -> str:
+        return "pong"
+
+    @callable(name="sum")
+    def add(self, left: int, right: int) -> int:
+        return left + right
+```
+
+#### `get_callable_methods(obj) -> dict[str, callable]`
+
+List exposed callable methods by name.
+
+```python
+from python_agents import get_callable_methods
+
+
+methods = get_callable_methods(Actions())
+assert set(methods) == {"ping", "sum"}
+```
+
+#### `await call_callable(obj, name, *args, **kwargs)`
+
+Call a registered callable method by name.
+
+```python
+from python_agents import call_callable
+
+
+result = await call_callable(Actions(), "sum", 2, 3)
+assert result == 5
+```
+
+### MCP tool helpers
+
+Use these to expose MCP-compatible tools from Python methods.
+
+#### `@tool(name=None, description=None, input_schema=None)`
+
+Mark a method as an MCP tool and optionally attach metadata.
+
+```python
+from python_agents import tool
+
+
+class SupportTools:
+    @tool(
+        description="Look up an order by ID",
+        input_schema={"order_id": "string"},
+    )
+    async def lookup_order(self, order_id: str):
+        return {"content": [{"type": "text", "text": f"order:{order_id}"}]}
+```
+
+#### `get_tool_methods(obj) -> dict[str, callable]`
+
+List tool methods exposed by an object.
+
+```python
+from python_agents import get_tool_methods
+
+
+tools = get_tool_methods(SupportTools())
+assert "lookup_order" in tools
+```
+
+#### `await call_tool(obj, name, arguments=None)`
+
+Call a tool directly using an MCP-style argument object.
+
+```python
+from python_agents import call_tool
+
+
+result = await call_tool(SupportTools(), "lookup_order", {"order_id": "123"})
+```
+
+#### `register_mcp_tools(server, obj) -> None`
+
+Register all `@tool` methods from an object onto an MCP server.
+
+```python
+from python_agents import register_mcp_tools
+
+
+register_mcp_tools(server, SupportTools())
+```
+
+### Routing and agent lookup helpers
+
+#### `await route_agent_request(*args)`
+
+Route a single request through Cloudflare's agent router.
+
+```python
+from python_agents import route_agent_request
+
+
+response = await route_agent_request(request, env, {"namespace": "chat", "name": "assistant"})
+```
+
+#### `await route_agent_requests(*args)`
+
+Alias of `route_agent_request` (plural naming for parity with some examples/docs).
+
+```python
+from python_agents import route_agent_requests
+
+
+response = await route_agent_requests(request, env, {"namespace": "chat", "name": "assistant"})
+```
+
+#### `await get_agent_by_name(*args) -> Agent`
+
+Look up an agent and return it wrapped as `Agent`.
+
+```python
+from python_agents import get_agent_by_name
+
+
+agent = await get_agent_by_name("chat", "assistant")
+```
+
+#### `await get_agent_by_id(*args) -> Agent`
+
+Look up an agent by ID and return it wrapped as `Agent`.
+
+```python
+from python_agents import get_agent_by_id
+
+
+agent = await get_agent_by_id("chat", "agent-id-123")
+```
+
+### Additional runtime wrappers
+
+These wrap more of the Cloudflare Agents JS SDK in a Python-friendly way.
+
+#### `McpAgent`
+
+Wrapper around JS `McpAgent`.
+
+- `McpAgent.create(state=None, env=None, ctx=None) -> McpAgent`
+- `await mcp_agent.call(method, *args)`
+- Dynamic async method access via `await mcp_agent.some_method(...)`
+- Properties: `mcp_agent.state`, `mcp_agent.env`, `mcp_agent.ctx`
+
+```python
+from python_agents import McpAgent
+
+
+mcp_agent = McpAgent.create(state={"session": "abc"}, env=env, ctx=ctx)
+```
+
+#### `AgentWorkflow`
+
+Wrapper around JS `AgentWorkflow`.
+
+- `AgentWorkflow.create(init=None) -> AgentWorkflow`
+- `await workflow.call(method, *args)`
+- Dynamic async method access via `await workflow.some_method(...)`
+
+```python
+from python_agents import AgentWorkflow
+
+
+workflow = AgentWorkflow.create({"name": "onboarding"})
+```
+
+#### `create_mcp_handler(*args)`
+
+Python wrapper for JS `createMcpHandler`.
+
+```python
+from python_agents import create_mcp_handler
+
+
+handler = create_mcp_handler({"agent": "support"})
+```
+
+#### `await route_agent_email(*args)`
+
+Python wrapper for JS `routeAgentEmail`.
+
+```python
+from python_agents import route_agent_email
+
+
+result = await route_agent_email(message, env, resolver)
+```
+
+#### `create_address_based_email_resolver(*args)`
+
+Python wrapper for JS `createAddressBasedEmailResolver`.
+
+```python
+from python_agents import create_address_based_email_resolver
+
+
+resolver = create_address_based_email_resolver({"support@example.com": "support-agent"})
+```
 
 ## Next steps
 
