@@ -1,8 +1,8 @@
-# python-agents
+# agents-py
 
-`python-agents` is a Python-first interface for building Cloudflare Agents from Python Workers.
-It keeps the Cloudflare runtime behavior in the official JavaScript SDK, while giving you a clean,
-Pythonic API (`snake_case`, decorators, helper utilities, and typed-friendly patterns).
+`agents-py` is a Python-first interface for building Cloudflare Agents from Python Workers.
+It keeps the Cloudflare runtime behavior in the official JavaScript SDK, while giving you a clean API
+(`snake_case`, decorators, helper utilities, and typed-friendly patterns).
 
 ## Installation
 
@@ -29,32 +29,6 @@ pip install -e .[dev]
   - `get_agent_by_id`
 - Built-in wrappers for schedules, queue operations, MCP, workflows, and state.
 
-## Minimal Worker bridge setup
-
-Cloudflare executes the core agent runtime from the JS SDK. To expose that runtime to Python,
-add a small bridge module to your Worker bundle.
-
-`src/agents_bridge.mjs`:
-
-```js
-import {
-  Agent,
-  routeAgentRequest,
-  getAgentByName,
-  getAgent,
-} from "agents";
-
-globalThis.__PYTHON_AGENTS_SDK = {
-  Agent,
-  routeAgentRequest,
-  getAgentByName,
-  getAgent,
-  createAgent(init = {}) {
-    return new Agent(init);
-  },
-};
-```
-
 ## Quick start: create and mutate an agent
 
 ```python
@@ -67,7 +41,31 @@ async def build_counter(env, ctx):
     return agent
 ```
 
-## `@callable` methods (Pythonic implementation)
+## Tool-calling example
+
+A practical pattern is to model tools as `@callable` methods and let your LLM choose one.
+
+```python
+from python_agents import call_callable, callable
+
+
+class SupportTools:
+    @callable
+    async def lookup_order(self, order_id: str) -> dict:
+        return {"order_id": order_id, "status": "shipped"}
+
+    @callable
+    def refund_policy(self) -> str:
+        return "Refunds are allowed within 30 days."
+
+
+async def run_tool_call(tool_name: str, arguments: dict):
+    tools = SupportTools()
+    # tool_name from model output; arguments parsed from JSON
+    return await call_callable(tools, tool_name, **arguments)
+```
+
+## `@callable` methods
 
 Use `@callable` to mark methods that should be exposed as callable endpoints by your own routing layer.
 
@@ -97,31 +95,7 @@ async def demo_callable_dispatch():
     assert result == 5
 ```
 
-## Tool-calling example
-
-A practical pattern is to model tools as `@callable` methods and let your LLM choose one.
-
-```python
-from python_agents import call_callable, callable
-
-
-class SupportTools:
-    @callable
-    async def lookup_order(self, order_id: str) -> dict:
-        return {"order_id": order_id, "status": "shipped"}
-
-    @callable
-    def refund_policy(self) -> str:
-        return "Refunds are allowed within 30 days."
-
-
-async def run_tool_call(tool_name: str, arguments: dict):
-    tools = SupportTools()
-    # tool_name from model output; arguments parsed from JSON
-    return await call_callable(tools, tool_name, **arguments)
-```
-
-## Routing helpers (equivalent to Cloudflare routing helpers)
+## Routing helpers
 
 ```python
 from python_agents import get_agent_by_name, route_agent_request
@@ -139,6 +113,32 @@ async def fetch(request, env, ctx):
 async def inspect_agent(env):
     agent = await get_agent_by_name("chat", "assistant")
     return agent.state
+```
+
+## Worker bridge setup
+
+Cloudflare executes the core agent runtime from the JS SDK. To expose that runtime to Python,
+add a small bridge module to your Worker bundle.
+
+`src/agents_bridge.mjs`:
+
+```js
+import {
+  Agent,
+  routeAgentRequest,
+  getAgentByName,
+  getAgent,
+} from "agents";
+
+globalThis.__PYTHON_AGENTS_SDK = {
+  Agent,
+  routeAgentRequest,
+  getAgentByName,
+  getAgent,
+  createAgent(init = {}) {
+    return new Agent(init);
+  },
+};
 ```
 
 ## Scheduling tasks
