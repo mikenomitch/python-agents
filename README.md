@@ -4,10 +4,9 @@ This repo gives you a Python-first SDK for [Cloudflare Agents](https://developer
 
 ## Why Cloudflare for Python Agents?
 
+- **Everything you need for Agents**: state, scheduling, queues, routing, and MCP support.
 - **Runs globally** by default, so latency is usually good without extra setup.
-- **No server babysitting**: no VMs, no Kubernetes setup, no custom autoscaling logic.
-- **Useful agent features included**: state, scheduling, queues, routing, and MCP support.
-- **Feels like Python**: decorators and APIs that follow normal Python conventions.
+- **No infrastructure hassle**: no VMs, no Kubernetes, no custom scaling or observability logic
 - **Can grow with you**: starts simple, but works for production workloads too.
 
 ---
