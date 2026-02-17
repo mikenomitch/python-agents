@@ -12,6 +12,7 @@ from .routing import (
     route_agent_request,
     route_agent_requests,
 )
+from .tools import call_tool, get_tool_methods, register_mcp_tools, tool
 
 __all__ = [
     "Agent",
@@ -27,4 +28,8 @@ __all__ = [
     "route_agent_email",
     "route_agent_request",
     "route_agent_requests",
+    "call_tool",
+    "get_tool_methods",
+    "register_mcp_tools",
+    "tool",
 ]

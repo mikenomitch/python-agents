@@ -65,6 +65,33 @@ async def run_tool_call(tool_name: str, arguments: dict):
     return await call_callable(tools, tool_name, **arguments)
 ```
 
+## MCP tool registration (parity with JS `server.tool(...)`)
+
+Cloudflare's JS examples define MCP tools with `server.tool(name, schema, handler)`.
+This package now provides the same pattern in Python with `@tool` + `register_mcp_tools(...)`.
+
+```python
+from python_agents import register_mcp_tools, tool
+
+
+class SupportTools:
+    @tool(input_schema={"order_id": "string"})
+    async def lookup_order(self, order_id: str):
+        return {"content": [{"type": "text", "text": f"order:{order_id}"}]}
+
+
+async def init_mcp(server):
+    register_mcp_tools(server, SupportTools())
+```
+
+You can also invoke tools directly during tests or local dispatch:
+
+```python
+from python_agents import call_tool
+
+result = await call_tool(SupportTools(), "lookup_order", {"order_id": "123"})
+```
+
 ## `@callable` methods
 
 Use `@callable` to mark methods that should be exposed as callable endpoints by your own routing layer.

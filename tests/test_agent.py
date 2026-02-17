@@ -6,6 +6,7 @@ import pytest
 
 from python_agents import agent as agent_module
 from python_agents import apis as apis_module
+from python_agents import tools as tools_module
 from python_agents._ffi import snake_to_camel
 from python_agents.agent import Agent, call_callable, callable, get_callable_methods
 from python_agents.apis import (
@@ -15,6 +16,7 @@ from python_agents.apis import (
     create_mcp_handler,
     route_agent_email,
 )
+from python_agents.tools import call_tool, get_tool_methods, register_mcp_tools, tool
 from python_agents.routing import (
     get_agent_by_name,
     route_agent_request,
@@ -93,12 +95,24 @@ class FakeSDK:
         return FakeJSAgent({"state": {"namespace": namespace, "name": name}})
 
 
+class FakeMcpServer:
+    def __init__(self):
+        self.tools = {}
+
+    def tool(self, name, schema_or_handler, maybe_handler=None):
+        if maybe_handler is None:
+            self.tools[name] = {"schema": None, "handler": schema_or_handler}
+        else:
+            self.tools[name] = {"schema": schema_or_handler, "handler": maybe_handler}
+
+
 @pytest.fixture(autouse=True)
 def patch_sdk(monkeypatch):
     monkeypatch.setattr(agent_module, "get_agents_sdk", lambda: FakeSDK())
     monkeypatch.setattr(agent_module, "to_js", lambda value: value)
     monkeypatch.setattr(apis_module, "get_agents_sdk", lambda: FakeSDK())
     monkeypatch.setattr(apis_module, "to_js", lambda value: value)
+    monkeypatch.setattr(tools_module, "to_js", lambda value: value)
 
     import python_agents.routing as routing_module
 
@@ -144,31 +158,35 @@ class ExampleCallableAgent:
         return left + right
 
 
-@pytest.mark.asyncio
-async def test_callable_decorator_and_dispatch():
-    agent = ExampleCallableAgent()
+def test_callable_decorator_and_dispatch():
+    async def _run():
+        agent = ExampleCallableAgent()
 
-    methods = get_callable_methods(agent)
-    assert sorted(methods.keys()) == ["greet", "sum"]
+        methods = get_callable_methods(agent)
+        assert sorted(methods.keys()) == ["greet", "sum"]
 
-    greeting = await call_callable(agent, "greet", "python")
-    assert greeting == "hello python"
+        greeting = await call_callable(agent, "greet", "python")
+        assert greeting == "hello python"
 
-    total = await call_callable(agent, "sum", 2, 3)
-    assert total == 5
+        total = await call_callable(agent, "sum", 2, 3)
+        assert total == 5
+
+    asyncio.run(_run())
 
 
-@pytest.mark.asyncio
-async def test_route_helpers_and_get_agent_by_name():
-    routed = await route_agent_request("REQ", {"NAMESPACE": "x"}, {"name": "demo"})
-    routed_plural = await route_agent_requests(
-        "REQ", {"NAMESPACE": "x"}, {"name": "demo"}
-    )
-    assert routed == routed_plural
+def test_route_helpers_and_get_agent_by_name():
+    async def _run():
+        routed = await route_agent_request("REQ", {"NAMESPACE": "x"}, {"name": "demo"})
+        routed_plural = await route_agent_requests(
+            "REQ", {"NAMESPACE": "x"}, {"name": "demo"}
+        )
+        assert routed == routed_plural
 
-    agent = await get_agent_by_name("examples", "demo")
-    assert isinstance(agent, Agent)
-    assert agent.state["name"] == "demo"
+        agent = await get_agent_by_name("examples", "demo")
+        assert isinstance(agent, Agent)
+        assert agent.state["name"] == "demo"
+
+    asyncio.run(_run())
 
 
 def test_mcp_agent_wrapper():
@@ -204,5 +222,45 @@ def test_email_and_mcp_handler_helpers():
 
         resolver = create_address_based_email_resolver({"x@example.com": "agent-id"})
         assert resolver == {"resolver": {"x@example.com": "agent-id"}}
+
+    asyncio.run(_run())
+
+
+class ExampleMcpTools:
+    @tool(input_schema={"order_id": "string"})
+    async def lookup_order(self, order_id: str):
+        return {"content": [{"type": "text", "text": f"order:{order_id}"}]}
+
+    @tool(name="refund_policy")
+    def policy(self):
+        return {"content": [{"type": "text", "text": "30 days"}]}
+
+
+def test_tool_decorator_dispatch_and_registration():
+    async def _run():
+        tools = ExampleMcpTools()
+        methods = get_tool_methods(tools)
+        assert sorted(methods.keys()) == ["lookup_order", "refund_policy"]
+
+        result = await call_tool(tools, "lookup_order", {"order_id": "123"})
+        assert result["content"][0]["text"] == "order:123"
+
+        server = FakeMcpServer()
+        register_mcp_tools(server, tools)
+
+        assert set(server.tools.keys()) == {"lookup_order", "refund_policy"}
+        assert server.tools["lookup_order"]["schema"] == {"order_id": "string"}
+        assert server.tools["refund_policy"]["schema"] is None
+
+        lookup_registered = await server.tools["lookup_order"]["handler"]({"order_id": "777"})
+        assert lookup_registered["content"][0]["text"] == "order:777"
+
+    asyncio.run(_run())
+
+
+def test_call_tool_missing_name_raises_key_error():
+    async def _run():
+        with pytest.raises(KeyError):
+            await call_tool(ExampleMcpTools(), "does_not_exist")
 
     asyncio.run(_run())
