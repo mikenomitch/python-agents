@@ -22,13 +22,32 @@ pip install -e .[dev]
 Create `src/agents_bridge.mjs`:
 
 ```js
-import { Agent, routeAgentRequest } from "agents";
+import {
+  Agent,
+  AgentWorkflow,
+  McpAgent,
+  createAddressBasedEmailResolver,
+  createMcpHandler,
+  routeAgentEmail,
+  routeAgentRequest,
+} from "agents";
 
 globalThis.__PYTHON_AGENTS_SDK = {
   Agent,
+  AgentWorkflow,
+  McpAgent,
+  createAddressBasedEmailResolver,
+  createMcpHandler,
+  routeAgentEmail,
   routeAgentRequest,
   createAgent(init = {}) {
     return new Agent(init);
+  },
+  createMcpAgent(init = {}) {
+    return new McpAgent(init);
+  },
+  createAgentWorkflow(init = {}) {
+    return new AgentWorkflow(init);
   },
 };
 ```
@@ -61,6 +80,14 @@ The wrapper intentionally forwards calls to JS. Exposed helper methods include:
 - `run_workflow`, `wait_for_approval`
 - `add_mcp_server`, `remove_mcp_server`, `get_mcp_servers`
 - `reply_to_email`
+
+Additional Pythonic wrappers are available for Cloudflare Agents APIs:
+
+- `McpAgent.create(...)` (JS: `McpAgent`)
+- `AgentWorkflow.create(...)` (JS: `AgentWorkflow`)
+- `create_mcp_handler(...)` (JS: `createMcpHandler`)
+- `route_agent_email(...)` (JS: `routeAgentEmail`)
+- `create_address_based_email_resolver(...)` (JS: `createAddressBasedEmailResolver`)
 
 You can also use `await agent.call("camelCaseName", ...)` for methods that are
 not listed.
