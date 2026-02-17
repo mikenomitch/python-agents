@@ -125,18 +125,34 @@ add a small bridge module to your Worker bundle.
 ```js
 import {
   Agent,
-  routeAgentRequest,
-  getAgentByName,
+  AgentWorkflow,
+  McpAgent,
+  createAddressBasedEmailResolver,
+  createMcpHandler,
   getAgent,
+  getAgentByName,
+  routeAgentEmail,
+  routeAgentRequest,
 } from "agents";
 
 globalThis.__PYTHON_AGENTS_SDK = {
   Agent,
+  AgentWorkflow,
+  McpAgent,
+  createAddressBasedEmailResolver,
+  createMcpHandler,
+  routeAgentEmail,
   routeAgentRequest,
   getAgentByName,
   getAgent,
   createAgent(init = {}) {
     return new Agent(init);
+  },
+  createMcpAgent(init = {}) {
+    return new McpAgent(init);
+  },
+  createAgentWorkflow(init = {}) {
+    return new AgentWorkflow(init);
   },
 };
 ```
@@ -206,6 +222,14 @@ async def attach_mcp(env, ctx):
 - `run_workflow`, `wait_for_approval`
 - `add_mcp_server`, `remove_mcp_server`, `get_mcp_servers`
 - `reply_to_email`
+
+Additional Pythonic wrappers are available for Cloudflare Agents APIs:
+
+- `McpAgent.create(...)` (JS: `McpAgent`)
+- `AgentWorkflow.create(...)` (JS: `AgentWorkflow`)
+- `create_mcp_handler(...)` (JS: `createMcpHandler`)
+- `route_agent_email(...)` (JS: `routeAgentEmail`)
+- `create_address_based_email_resolver(...)` (JS: `createAddressBasedEmailResolver`)
 
 For methods not listed above, use:
 
