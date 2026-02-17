@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "python-agents"
+version = "0.1.0"
+description = "Thin Python wrapper for Cloudflare Agents SDK via Python Workers FFI"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "python-agents maintainers" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
