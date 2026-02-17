@@ -1,0 +1,6 @@
+name = "python-agents-counter"
+main = "src/index.py"
+compatibility_date = "2026-01-01"
+
+[build]
+command = "echo 'ensure python-agents-bridge.mjs is bundled before Python entrypoint'"
